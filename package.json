@@ -1,0 +1,38 @@
+{
+  "name": "multi-thread-test",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "start": "node dist/index.js",
+    "worker": "ts-node src/worker.ts",
+    "worker:prod": "node dist/worker.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bullmq": "^5.66.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "ioredis": "^5.8.2",
+    "multer": "^2.0.2",
+    "sharp": "^0.34.5",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^25.0.2",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
