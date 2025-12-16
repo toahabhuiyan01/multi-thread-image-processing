@@ -51,10 +51,80 @@ npm run start        # API
 npm run worker:prod  # Worker
 ```
 
+## API Endpoints
+
+### POST `/process-images`
+Upload one or more images for async processing.
+
+**Request:** `multipart/form-data` with `images` field (max 10 files, 5MB each)
+
+**Response:** `202 Accepted`
+```json
+{
+  "batchId": "550e8400-e29b-41d4-a716-446655440000",
+  "statusUrl": "/batches/550e8400-e29b-41d4-a716-446655440000",
+  "totalFiles": 3
+}
+```
+
+---
+
+### GET `/batches/:batchId`
+Get status of all files in a batch.
+
+**Response:**
+```json
+{
+  "batchId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "progress": {
+    "total": 3,
+    "completed": 3,
+    "failed": 0,
+    "active": 0,
+    "waiting": 0
+  },
+  "createdAt": "2024-12-16T06:00:00.000Z",
+  "files": [
+    {
+      "jobId": "1",
+      "originalName": "photo1.jpg",
+      "state": "completed",
+      "result": { "originalName": "photo1.jpg", "outputPath": "processed/processed-abc123.jpg" },
+      "failedReason": null
+    }
+  ]
+}
+```
+
+**Batch Status Values:**
+- `waiting` - All files waiting to be processed
+- `processing` - At least one file is being processed
+- `completed` - All files processed successfully
+- `completed-with-errors` - Processing done but some files failed
+
+---
+
+### GET `/jobs/:jobId`
+Get status of a single file/job.
+
+**Response:**
+```json
+{
+  "jobId": "1",
+  "state": "completed",
+  "progress": 0,
+  "result": { "originalName": "photo1.jpg", "outputPath": "processed/processed-abc123.jpg" },
+  "failedReason": null
+}
+```
+
 **Job States:** `waiting` → `active` → `completed` or `failed`
 
+---
+
 ### Swagger Docs
-Interactive API documentation available at: **http://localhost:3000/docs**
+Interactive API documentation: **http://localhost:3000/docs**
 
 ## How It Works
 
@@ -62,27 +132,22 @@ Interactive API documentation available at: **http://localhost:3000/docs**
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌────────────┐
 │  Client │────▶│  Express API │────▶│ Redis Queue │────▶│   Worker   │
 └─────────┘     └─────────────┘     └─────────────┘     └────────────┘
-                      │                                        │
-                      │ 202 Accepted                          │
-                      │ + jobId                               ▼
-                      │                              ┌────────────────┐
-                      │                              │ Sharp (resize, │
-                      │                              │ grayscale,     │
-                      │                              │ compress)      │
-                      │                              └────────────────┘
-                      │                                        │
-                      ▼                                        ▼
-              ┌──────────────┐                        ┌──────────────┐
-              │ GET /jobs/id │◀───────────────────────│  Processed   │
-              │ for status   │                        │   Images     │
-              └──────────────┘                        └──────────────┘
+                      │                    │                   │
+                  202 Accepted        Stores batch         Processes
+                  + batchId           + job data           concurrently
+                      │                    │                   │
+                      ▼                    ▼                   ▼
+              ┌──────────────┐     ┌─────────────┐    ┌──────────────┐
+              │ GET /batches │◀────│ Job status  │◀───│  Processed   │
+              │ for status   │     │   updates   │    │   Images     │
+              └──────────────┘     └─────────────┘    └──────────────┘
 ```
 
-1. **Client uploads images** → API accepts and queues job immediately
-2. **API returns `202 Accepted`** with `jobId` → No blocking
-3. **Worker picks up job** from Redis queue
-4. **Sharp processes images** → Resize (512px), grayscale, JPEG compress
-5. **Client polls status** → Get result when completed
+1. **Client uploads images** → API queues each file as a separate job
+2. **API returns `202 Accepted`** with `batchId` → No blocking
+3. **Worker processes jobs concurrently** (up to CPU cores - 1)
+4. **Sharp transforms images** → Resize, grayscale, JPEG compress
+5. **Client polls batch status** → Get all results when completed
 
 ## Image Processing Pipeline
 
@@ -99,7 +164,7 @@ Each uploaded image goes through:
 |---------------------|---------|-------------|
 | `REDIS_HOST` | `localhost` | Redis server host |
 | `REDIS_PORT` | `6379` | Redis server port |
-| `REDIS_PASSWORD` | (empty) | Redis auth password |
+| `REDIS_PASSWORD` | *(empty)* | Redis auth password |
 
 ## Why This Architecture?
 
@@ -112,5 +177,6 @@ Each uploaded image goes through:
 ### Solution
 - **Decoupled processing** → API never blocks
 - **Job queue** → Absorbs traffic spikes
-- **Concurrency limits** → Prevents CPU overload
+- **Concurrency limits** → Prevents CPU overload (based on CPU cores)
+- **Batch tracking** → One ID to track multiple files
 - **Separate worker** → Crashes don't affect API
